@@ -42,7 +42,7 @@ class VOCdataset(Dataset):
             xmax = float(obj["bndbox"]["xmax"])
             ymax = float(obj["bndbox"]["ymax"])
             boxes.append([xmin,ymin,xmax,ymax])
-            labels.append(self.class_dict[obj["name"]])
+            labels.append(int(self.class_dict[obj["name"]]))
             if "difficult" in obj:
                 iscrowd.append(int(obj["difficult"]))
             else:

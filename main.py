@@ -1,2 +1,9 @@
 from dataset import VOCdataset
-VOCdataset()
+
+
+def main():
+    pass
+
+
+if __name__ == "main":
+    main()
