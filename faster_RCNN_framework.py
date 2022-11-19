@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from rpn import RegionProposalNetwork
 from roi_head import RoIHeads
+from transforms import GeneralizedRCNNTransform
 
 class FasterRCNNBase(nn.Module):
     def __init__(self, backbone, rpn, roi_heads, transform):

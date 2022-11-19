@@ -5,21 +5,23 @@ import json
 from PIL import Image
 import torch
 
+
 class VOCdataset(Dataset):
-    def __init__(self,transmforms = None):
+    def __init__(self, transmforms=None, txt_name="train.txt"):
         self.VOC_path = "./VOCdevkit/VOC2012"
         assert os.path.exists(self.VOC_path), f"can't find DataSet at {os.getcwd()}"
-        txt_path = os.path.join(self.VOC_path, "ImageSets", "Main", "train.txt")
+        txt_path = os.path.join(self.VOC_path, "ImageSets", "Main", txt_name)
         xml_path = os.path.join(self.VOC_path, "Annotations")
         with open(txt_path) as txt:
             self.xml_path_list = [os.path.join(xml_path, name.strip() + '.xml')
-                             for name in txt.readlines() if len(name.strip()) > 0]
+                                  for name in txt.readlines() if len(name.strip()) > 0]
 
         json_file = './pascal_voc_classes.json'
         assert os.path.exists(json_file), "{} file not exist.".format(json_file)
         with open(json_file, 'r') as f:
             self.class_dict = json.load(f)
         self.transforms = transmforms
+
     def __len__(self):
         return len(self.xml_path_list)
 
@@ -30,9 +32,9 @@ class VOCdataset(Dataset):
         xml_etree = etree.fromstring(xml_str)
         xml_dic = self.parse_xml_to_dict(xml_etree)
         data = xml_dic["annotation"]
-        jpg_path = os.path.join(self.VOC_path, "JPEGImages",data["filename"])
+        jpg_path = os.path.join(self.VOC_path, "JPEGImages", data["filename"])
         image = Image.open(jpg_path)
-        assert image.format == "JPEG",f"{jpg_path} is not JPEG file"
+        assert image.format == "JPEG", f"{jpg_path} is not JPEG file"
         boxes = []
         labels = []
         iscrowd = []
@@ -41,7 +43,7 @@ class VOCdataset(Dataset):
             ymin = float(obj["bndbox"]["ymin"])
             xmax = float(obj["bndbox"]["xmax"])
             ymax = float(obj["bndbox"]["ymax"])
-            boxes.append([xmin,ymin,xmax,ymax])
+            boxes.append([xmin, ymin, xmax, ymax])
             labels.append(int(self.class_dict[obj["name"]]))
             if "difficult" in obj:
                 iscrowd.append(int(obj["difficult"]))
@@ -62,7 +64,7 @@ class VOCdataset(Dataset):
 
         if self.transforms:
             image, target = self.transforms(image, target)
-        return image,target
+        return image, target
 
     def parse_xml_to_dict(self, xml):
         """
@@ -87,3 +89,6 @@ class VOCdataset(Dataset):
                     result[child.tag] = []
                 result[child.tag].append(child_result[child.tag])
         return {xml.tag: result}
+
+    def collate_fn(self, batch):
+        return tuple(zip(*batch))
