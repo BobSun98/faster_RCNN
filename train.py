@@ -1,3 +1,5 @@
+import math
+
 import torch
 
 from mobilenetv2_model import MobileNetV2
@@ -13,7 +15,7 @@ def create_model(num_classes):
     backbone = MobileNetV2(weights_path="./mobilenet_v2.pth").features
     backbone.out_channels = num_classes
     anchor_generator = AnchorsGenerator(sizes=(32, 64, 128, 256, 512), aspect_ratios=(0.5, 1.0, 2.0))
-    roi_pooler = torchvision.ops.RoIAlign(output_size=[7, 7], spatial_scale=1,sampling_ratio=2)
+    roi_pooler = torchvision.ops.RoIAlign(output_size=[7, 7], spatial_scale=1, sampling_ratio=2)
     model = FasterRCNN(
         backbone=backbone,
         num_classes=num_classes,
@@ -38,8 +40,22 @@ def train_one_epic(model, optimizer, data_loader, device, epoch, warmup=True):
 
         lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_f)
     mloss = torch.zeros(1).to(device)
-    x = enumerate(data_loader)
-    print(x)
+    for i, [images, targets] in enumerate(data_loader):
+        images = list(image.to(device) for image in images)
+        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+        loss_dict = model(images, targets)
+        losses = sum(loss for loss in loss_dict.values())
+        loss_value = losses.item()
+        mloss = (mloss * i + loss_value) / (i + 1)
+        assert math.isfinite(loss_value), f"loss is infinite:{loss_value}"
+        optimizer.zero_grad()
+        losses.backward()
+        optimizer.step()
+        if lr_scheduler is not None:
+            lr_scheduler.step()
+        now_lr = optimizer.param_groups[0]["lr"]
+
+    return mloss,now_lr
 
 
 def evaluate():
@@ -55,7 +71,7 @@ def main():
         "val": transforms.Compose((transforms.ToTensor))
     }
 
-    train_dataset = VOCdataset(txt_name="train.txt")
+    train_dataset = VOCdataset(data_transform["train"], txt_name="train.txt")
     train_data_loader = torch.utils.data.DataLoader(train_dataset,
                                                     batch_size=8,
                                                     shuffle=True,
@@ -63,7 +79,7 @@ def main():
                                                     num_workers=4,
                                                     collate_fn=train_dataset.collate_fn
                                                     )
-    val_dataset = VOCdataset(txt_name="val.txt")
+    val_dataset = VOCdataset(data_transform["val"], txt_name="val.txt")
     val_data_loader = torch.utils.data.DataLoader(val_dataset,
                                                   batch_size=1,
                                                   shuffle=False,
@@ -112,7 +128,7 @@ def main():
     num_epoch = 20
 
     for epoch in range(num_epoch):
-        mean_loss = train_one_epic(model, optmizer, train_data_loader, device, epoch, warmup=True)
+        mean_loss = train_one_epic(model, optimizer, train_data_loader, device, epoch, warmup=True)
         train_loss.append(mean_loss.item())
         learning_rate.append(lr)
 

@@ -31,7 +31,6 @@ class RegionProposalNetwork(torch.nn.Module):
         self.proposal_matcher = det_utils.Matcher(
             fg_iou_thresh,  # 当iou大于fg_iou_thresh(0.7)时视为正样本
             bg_iou_thresh,  # 当iou小于bg_iou_thresh(0.3)时视为负样本
-            allow_low_quality_matches=True
         )
 
         self.fg_bg_sampler = det_utils.BalancedPositiveNegativeSampler(

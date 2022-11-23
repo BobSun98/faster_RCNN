@@ -4,6 +4,7 @@ from rpn import RegionProposalNetwork
 from roi_head import RoIHeads
 from transforms import GeneralizedRCNNTransform
 
+
 class FasterRCNNBase(nn.Module):
     def __init__(self, backbone, rpn, roi_heads, transform):
         super(FasterRCNNBase, self).__init__()
@@ -11,6 +12,17 @@ class FasterRCNNBase(nn.Module):
         self.backbone = backbone
         self.rpn = rpn
         self.roi_heads = roi_heads
+
+    def forward(self, images, targets=None):
+        original_image_sizes = []
+        if self.training:
+            assert targets is not None
+        for img in images:
+            val = img.shape[-2:]
+            original_image_sizes.append((val[0], val[1]))
+            images, targets = self.transform(images, targets)
+            a = images.tensors
+            feature = self.backbone(images.tensors)
 
 
 class FasterRCNN(FasterRCNNBase):
@@ -48,7 +60,6 @@ class FasterRCNN(FasterRCNNBase):
             rpn_batch_size_per_image, rpn_positive_fraction,
             rpn_pre_nms_top_n, rpn_post_nms_top_n, rpn_nms_thresh,
             score_thresh=rpn_score_thresh)
-
 
         # 将roi pooling, box_head以及box_predictor结合在一起
         roi_heads = RoIHeads(

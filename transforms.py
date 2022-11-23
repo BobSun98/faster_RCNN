@@ -4,6 +4,33 @@ from torchvision.transforms import functional as F
 import random
 
 
+def _resize_image(image, self_min_size, self_max_size):
+    im_shape = torch.tensor(image.shape[-2:])
+    min_size = float(torch.min(im_shape))
+    max_size = float(torch.max(im_shape))
+    scale_factor = self_min_size / min_size
+    if max_size * scale_factor > self_max_size:
+        scale_factor = self_max_size / max_size
+    image = torch.nn.functional.interpolate(image[None], scale_factor=scale_factor, mode="bilinear",
+                                            recompute_scale_factor=True, align_corners=False)
+    return image
+
+
+def resize_boxes(boxes, original_szie, new_size):
+    ratios = [
+        torch.tensor(s, dtype=torch.float32, device=boxes.device) /
+        torch.tensor(s_orig, dtype=torch.float32, device=boxes.device)
+        for s, s_orig in zip(new_size, original_szie)]
+    ratios_height, ratios_width = ratios
+    xmin, ymin, xmax, ymax = boxes.unbind(1)
+    xmin = xmin * ratios_width
+    xmax = xmax * ratios_width
+    ymin = ymin * ratios_height
+    ymax = ymax * ratios_height
+
+    return torch.stack((xmin, ymin, xmax, ymax), dim=1)
+
+
 class GeneralizedRCNNTransform(nn.Module):
     def __init__(self, min_size, max_size, image_mean, image_std):
         super(GeneralizedRCNNTransform, self).__init__()
@@ -13,6 +40,59 @@ class GeneralizedRCNNTransform(nn.Module):
         self.max_size = max_size  # 指定图像的最大边长范围
         self.image_mean = image_mean  # 指定图像在标准化处理中的均值
         self.image_std = image_std  # 指定图像在标准化处理中的方差
+
+    def normalize(self, image):
+        dtype, device = image.dtype, image.device
+        mean = torch.as_tensor(self.image_mean, dtype=dtype, device=device)
+        std = torch.as_tensor(self.image_std, dtype=dtype, device=device)
+        return (image - mean[:, None, None]) / std[:, None, None]
+
+    def torch_choice(self, k):
+        index = int(torch.empty(1).uniform_(0., float(len(k))).item())
+        return k[index]
+
+    def resize(self, image, targets):
+        h, w = image.shape[-2:]
+        size = float(self.min_size[-1])
+        image = _resize_image(image)
+        if targets is None:
+            return image, targets
+        bbox = targets["boxes"]
+        bbox = resize_boxes(bbox, [h, w], image.shape[-2:])
+        targets["boxes"] = bbox
+        return image, targets
+
+    def max_by_axis(self,the_list):
+        maxes = the_list[0]
+        for sublist in the_list[1:]:
+            for index,item in enumerate(sublist)
+                maxes[index] = max(maxes[index],item)
+        return maxes
+    def batch_images(self,images, size_divisible=32):#size_divisible:将长和宽调整到该数的整数倍
+        max_size = self.max_by_axis([list(img.shape) for img in images])#max_size:[max_channel,max_weight,max_height]
+        stride = float(size_divisible)
+        max_size[1] =
+
+
+
+
+    def forward(self, images, targets=None):
+        images = [img for img in images]
+        for i in range(len(images)):
+            image = images[i]
+            target_index = targets[i] if targets is not None else None
+
+            assert image.dim() == 3
+
+            image = self.normalize(image)
+            image, target_index = self.resize(image, target_index)
+            images[i] = image
+            if targets is not None:
+                targets[i] = target_index
+
+        #resize之后的尺寸
+        image_sizes = [img.shape[-2:] for img in images]
+        images = self.batch_images(images)
 
 
 class Compose(object):
@@ -30,14 +110,16 @@ class ToTensor(object):
         image = F.to_tensor(image)
         return image, target
 
+
 class RandomHorizontalFlip(object):
-    def __init__(self,prob = 0.5):
+    def __init__(self, prob=0.5):
         self.prob = prob
-    def __call__(self, image,target):
-        if random.random() <self.prob:
-            height ,width = image.shape[:-2]
+
+    def __call__(self, image, target):
+        if random.random() < self.prob:
+            height, width = image.shape[-2:]
             image = image.flip(-1)
             bbox = target["boxes"]
-            bbox[:,[0,2]] =width - bbox[:,[2,0]]
+            bbox[:, [0, 2]] = width - bbox[:, [2, 0]]
             target["boxes"] = bbox
-        return image,target
+        return image, target

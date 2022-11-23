@@ -21,8 +21,8 @@ class RoIHeads(nn.Module):
         # assign ground-truth boxes for each proposal
         self.proposal_matcher = det_utils.Matcher(
             fg_iou_thresh,  # default: 0.5
-            bg_iou_thresh,  # default: 0.5
-            allow_low_quality_matches=False)
+            bg_iou_thresh,)  # default: 0.5
+
 
         self.fg_bg_sampler = det_utils.BalancedPositiveNegativeSampler(
             batch_size_per_image,  # default: 512
