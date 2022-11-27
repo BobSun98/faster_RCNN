@@ -44,6 +44,7 @@ def train_one_epic(model, optimizer, data_loader, device, epoch, warmup=True):
         images = list(image.to(device) for image in images)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
         loss_dict = model(images, targets)
+        print("nono")
         losses = sum(loss for loss in loss_dict.values())
         loss_value = losses.item()
         mloss = (mloss * i + loss_value) / (i + 1)

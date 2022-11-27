@@ -20,9 +20,10 @@ class FasterRCNNBase(nn.Module):
         for img in images:
             val = img.shape[-2:]
             original_image_sizes.append((val[0], val[1]))
-            images, targets = self.transform(images, targets)
-            a = images.tensors
-            feature = self.backbone(images.tensors)
+        images, targets = self.transform(images, targets)
+        feature = self.backbone(images.tensors)#现在的image已经是ImageList对象啦
+        pass
+
 
 
 class FasterRCNN(FasterRCNNBase):

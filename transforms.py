@@ -1,3 +1,5 @@
+import math
+
 import torch
 from torch import nn
 from torchvision.transforms import functional as F
@@ -12,7 +14,7 @@ def _resize_image(image, self_min_size, self_max_size):
     if max_size * scale_factor > self_max_size:
         scale_factor = self_max_size / max_size
     image = torch.nn.functional.interpolate(image[None], scale_factor=scale_factor, mode="bilinear",
-                                            recompute_scale_factor=True, align_corners=False)
+                                            recompute_scale_factor=True, align_corners=False)[0]
     return image
 
 
@@ -54,7 +56,7 @@ class GeneralizedRCNNTransform(nn.Module):
     def resize(self, image, targets):
         h, w = image.shape[-2:]
         size = float(self.min_size[-1])
-        image = _resize_image(image)
+        image = _resize_image(image, size, self.max_size)
         if targets is None:
             return image, targets
         bbox = targets["boxes"]
@@ -62,19 +64,24 @@ class GeneralizedRCNNTransform(nn.Module):
         targets["boxes"] = bbox
         return image, targets
 
-    def max_by_axis(self,the_list):
+    def max_by_axis(self, the_list):
         maxes = the_list[0]
         for sublist in the_list[1:]:
-            for index,item in enumerate(sublist)
-                maxes[index] = max(maxes[index],item)
+            for index, item in enumerate(sublist):
+                maxes[index] = max(maxes[index], item)
         return maxes
-    def batch_images(self,images, size_divisible=32):#size_divisible:将长和宽调整到该数的整数倍
-        max_size = self.max_by_axis([list(img.shape) for img in images])#max_size:[max_channel,max_weight,max_height]
+
+    def batch_images(self, images, size_divisible=32):  # size_divisible:将长和宽调整到该数的整数倍
+        max_size = self.max_by_axis([list(img.shape) for img in images])  # max_size:[max_channel,max_width,max_height]
         stride = float(size_divisible)
-        max_size[1] =
+        max_size[1] = int(math.ceil(float(max_size[1] / stride)) * stride)  # width和height向上调整到stride的整数倍
+        max_size[2] = int(math.ceil(float(max_size[2] / stride)) * stride)
+        batch_shape = [len(images)] + max_size  # [8,3,224,224]
+        batched_images = images[0].new_full(batch_shape, 0)
+        for img, pad_img in zip(images, batched_images):
+            pad_img[:img.shape[0], :img.shape[1], :img.shape[2]].copy_(img)
 
-
-
+        return batched_images
 
     def forward(self, images, targets=None):
         images = [img for img in images]
@@ -90,9 +97,26 @@ class GeneralizedRCNNTransform(nn.Module):
             if targets is not None:
                 targets[i] = target_index
 
-        #resize之后的尺寸
+        # resize之后的尺寸
         image_sizes = [img.shape[-2:] for img in images]
+        image_sizes_list = []
         images = self.batch_images(images)
+        for img_size in image_sizes:
+            assert len(img_size) == 2
+            image_sizes_list.append((img_size[0], img_size[1]))  # 这个保存的是resize以后,batch以前的尺寸
+
+        images_list = ImageList(images, image_sizes_list)
+        return images_list, targets
+
+
+class ImageList(object):
+    def __init__(self, tensors, image_sizes):
+        self.tensors = tensors
+        self.image_sizes = image_sizes
+
+    def to(self, device):
+        cast_tensor = self.tensors.to(device)
+        return ImageList(cast_tensor, self.image_sizes)
 
 
 class Compose(object):
